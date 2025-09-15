@@ -5,14 +5,13 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
-from imblearn.over_sampling import SMOTE
 
 # -----------------------------
 # 1. Load or create dataset
 # -----------------------------
 @st.cache_data
 def load_data():
-    # For demo: small sample dataset
+    # Small demo dataset
     data = {
         "Age": [18, 20, 21, 22, 23, 24, 25, 26],
         "Gender": ["Male", "Female", "Female", "Male", "Male", "Female", "Male", "Female"],
@@ -31,12 +30,11 @@ df = load_data()
 X = df.drop("DroppedOut", axis=1)
 y = df["DroppedOut"]
 
-# Identify categorical & numeric
 categorical = X.select_dtypes(include="object").columns.tolist()
 numeric = X.select_dtypes(exclude="object").columns.tolist()
 
 # -----------------------------
-# 3. Preprocessing + SMOTE + Model
+# 3. Preprocessing + Model
 # -----------------------------
 preprocessor = ColumnTransformer([
     ("cat", OneHotEncoder(handle_unknown="ignore"), categorical),
@@ -48,14 +46,10 @@ pipeline = Pipeline([
     ("clf", RandomForestClassifier(random_state=42))
 ])
 
-# Train/test split
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
 
-# Apply SMOTE on training set
-smote = SMOTE(random_state=42)
-X_train_res, y_train_res = smote.fit_resample(pd.get_dummies(X_train, drop_first=True), y_train)
-
-# Fit model
 pipeline.fit(X_train, y_train)
 
 # -----------------------------
@@ -65,7 +59,6 @@ st.title("🎓 Student Dropout Prediction")
 
 st.write("This app predicts whether a student is likely to drop out based on simple features.")
 
-# User inputs
 st.sidebar.header("Enter Student Info")
 
 age = st.sidebar.slider("Age", 16, 30, 20)
@@ -73,7 +66,6 @@ gender = st.sidebar.selectbox("Gender", ["Male", "Female"])
 gpa = st.sidebar.slider("GPA", 0.0, 4.0, 2.5)
 parent_edu = st.sidebar.selectbox("Parental Education", ["HighSchool", "College", "Masters", "PhD"])
 
-# Make dataframe
 input_df = pd.DataFrame({
     "Age": [age],
     "Gender": [gender],
@@ -81,7 +73,6 @@ input_df = pd.DataFrame({
     "Parental_Education": [parent_edu]
 })
 
-# Prediction
 prediction = pipeline.predict(input_df)[0]
 proba = pipeline.predict_proba(input_df)[0][1]
 
