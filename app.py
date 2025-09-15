@@ -1,35 +1,90 @@
 import streamlit as st
-import joblib
-import json
 import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
+from imblearn.over_sampling import SMOTE
 
-# Load model
-model = joblib.load("model_pipeline.pkl")
+# -----------------------------
+# 1. Load or create dataset
+# -----------------------------
+@st.cache_data
+def load_data():
+    # For demo: small sample dataset
+    data = {
+        "Age": [18, 20, 21, 22, 23, 24, 25, 26],
+        "Gender": ["Male", "Female", "Female", "Male", "Male", "Female", "Male", "Female"],
+        "GPA": [2.1, 3.4, 1.8, 2.7, 3.1, 2.5, 1.9, 3.6],
+        "Parental_Education": ["HighSchool", "College", "HighSchool", "Masters",
+                               "College", "College", "HighSchool", "PhD"],
+        "DroppedOut": [1, 0, 1, 0, 0, 0, 1, 0]
+    }
+    return pd.DataFrame(data)
 
-# Load metadata
-with open("model_metadata.json") as f:
-    metadata = json.load(f)
+df = load_data()
 
-features = metadata["features"]
+# -----------------------------
+# 2. Split features/target
+# -----------------------------
+X = df.drop("DroppedOut", axis=1)
+y = df["DroppedOut"]
 
-st.title("🎓 Student Dropout Predictor")
-st.write("Enter student details to predict the risk of dropout.")
+# Identify categorical & numeric
+categorical = X.select_dtypes(include="object").columns.tolist()
+numeric = X.select_dtypes(exclude="object").columns.tolist()
 
-# Input form
-user_input = {}
-for feature in features:
-    if feature == "gender":
-        user_input[feature] = st.selectbox("Gender", ["Male", "Female"])
-    else:
-        user_input[feature] = st.number_input(f"{feature}", value=0.0)
+# -----------------------------
+# 3. Preprocessing + SMOTE + Model
+# -----------------------------
+preprocessor = ColumnTransformer([
+    ("cat", OneHotEncoder(handle_unknown="ignore"), categorical),
+    ("num", StandardScaler(), numeric)
+])
 
-# Convert to DataFrame
-input_df = pd.DataFrame([user_input])
+pipeline = Pipeline([
+    ("preprocessor", preprocessor),
+    ("clf", RandomForestClassifier(random_state=42))
+])
 
-# Predict
-if st.button("Predict Dropout Risk"):
-    prediction = model.predict(input_df)[0]
-    probability = model.predict_proba(input_df)[0][1]
-    
-    st.write("### Prediction:", "🔴 High Risk of Dropout" if prediction == 1 else "🟢 Low Risk of Dropout")
-    st.write("### Probability of Dropout:", f"{probability:.2%}")
+# Train/test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+# Apply SMOTE on training set
+smote = SMOTE(random_state=42)
+X_train_res, y_train_res = smote.fit_resample(pd.get_dummies(X_train, drop_first=True), y_train)
+
+# Fit model
+pipeline.fit(X_train, y_train)
+
+# -----------------------------
+# 4. Streamlit UI
+# -----------------------------
+st.title("🎓 Student Dropout Prediction")
+
+st.write("This app predicts whether a student is likely to drop out based on simple features.")
+
+# User inputs
+st.sidebar.header("Enter Student Info")
+
+age = st.sidebar.slider("Age", 16, 30, 20)
+gender = st.sidebar.selectbox("Gender", ["Male", "Female"])
+gpa = st.sidebar.slider("GPA", 0.0, 4.0, 2.5)
+parent_edu = st.sidebar.selectbox("Parental Education", ["HighSchool", "College", "Masters", "PhD"])
+
+# Make dataframe
+input_df = pd.DataFrame({
+    "Age": [age],
+    "Gender": [gender],
+    "GPA": [gpa],
+    "Parental_Education": [parent_edu]
+})
+
+# Prediction
+prediction = pipeline.predict(input_df)[0]
+proba = pipeline.predict_proba(input_df)[0][1]
+
+st.subheader("📊 Prediction Result")
+st.write("**Likely to Dropout**" if prediction == 1 else "**Likely to Continue**")
+st.write(f"Probability of Dropout: {proba:.2f}")
